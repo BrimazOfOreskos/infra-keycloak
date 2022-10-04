@@ -1,0 +1,281 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "A standalone Keycloak instance for evaluation and integration testing",
+    "Parameters": {
+        "KeycloakImageId": {
+            "Type": "AWS::EC2::Image::Id",
+            "Default": "ami-026b57f3c383c2eec"
+        },
+        "KeycloakInstanceType": {
+            "Type": "String",
+            "AllowedValues": [
+                "m5.large",
+                "m5.xlarge"
+            ],
+            "Default": "m5.large"
+        },
+        "KeycloakKeyName": {
+            "Type": "AWS::EC2::KeyPair::KeyName"
+        },
+        "KeycloakMonitoring": {
+            "Type": "String",
+            "AllowedValues": [
+                "true",
+                "false"
+            ],
+            "Default": "true"
+        },
+        "KeycloakSubnetId": {
+            "Type": "AWS::EC2::Subnet::Id"
+        },
+        "KeycloakVpcId": {
+            "Type": "AWS::EC2::VPC::Id"
+        },
+        "ProjectCategory": {
+            "Type": "String",
+            "AllowedValues": [
+                "idam"
+            ],
+            "Default": "idam"
+        },
+        "ProjectName": {
+            "Type": "String",
+            "AllowedValues": [
+                "oreskos"
+            ],
+            "Default": "oreskos"
+        },
+        "SoftwareName": {
+            "Type": "String",
+            "AllowedValues": [
+                "keycloak"
+            ],
+            "Default": "keycloak"
+        }
+    },
+    "Resources": {
+        "KeycloakStandaloneInstance": {
+            "Type": "AWS::EC2::Instance",
+            "Metadata": {
+                "AWS::CloudFormation::Init": {
+                    "configSets": {
+                        "standard": [
+                            "downloadKeycloak",
+                            "configureKeycloak"
+                        ]
+                    },
+                    "configureKeycloak": {
+                        "files": {
+                            "/etc/systemd/system/keycloak.service": {
+                                "source": ""
+                            },
+                            "/opt/keycloak/conf/keycloak.conf": {
+                                "source": "",
+                                "group": "keycloak",
+                                "user": "keycloak"
+                            }
+                        },
+                        "commands": {
+                            "unpack": {
+                                "command": "chown -R keycloak:keycloak /opt/keycloak"
+                            }
+                        }
+                    },
+                    "downloadKeycloak": {
+                        "packages": {
+                            "yum": {
+                                "java-17-amazon-corretto": []
+                            }
+                        },
+                        "users": {
+                            "keycloak": {}
+                        },
+                        "sources": {
+                            "/opt/keycloak": "https://github.com/keycloak/keycloak/releases/download/19.0.2/keycloak-19.0.2.tar.gz"
+                        },
+                        "commands": {
+                            "unpack": {
+                                "command": "mv /opt/keycloak/keycloak-19.0.2/* /opt/keycloak && rm -rf /opt/keycloak/keycloak-19.0.2"
+                            }
+                        }
+                    }
+                }
+            },
+            "Properties": {
+                "BlockDeviceMappings": [
+                    {
+                        "DeviceName": "/dev/sda1",
+                        "Ebs": {
+                            "DeleteOnTermination": true,
+                            "Encrypted": true,
+                            "VolumeSize": 40,
+                            "VolumeType": "gp2"
+                        }
+                    }
+                ],
+                "ImageId": {
+                    "Ref": "KeycloakImageId"
+                },
+                "InstanceInitiatedShutdownBehavior": "stop",
+                "InstanceType": {
+                    "Ref": "KeycloakInstanceType"
+                },
+                "KeyName": {
+                    "Ref": "KeycloakKeyName"
+                },
+                "Monitoring": {
+                    "Ref": "KeycloakMonitoring"
+                },
+                "NetworkInterfaces": [
+                    {
+                        "AssociatePublicIpAddress": true,
+                        "DeleteOnTermination": true,
+                        "DeviceIndex": "0",
+                        "GroupSet": [
+                            {
+                                "Ref": "KeycloakStandaloneSG"
+                            }
+                        ],
+                        "SubnetId": {
+                            "Ref": "KeycloakSubnetId"
+                        }
+                    }
+                ],
+                "PropagateTagsToVolumeOnCreation": true,
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "-",
+                                [
+                                    {
+                                        "Ref": "ProjectName"
+                                    },
+                                    {
+                                        "Ref": "SoftwareName"
+                                    }
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        "Key": "Project",
+                        "Value": {
+                            "Ref": "ProjectName"
+                        }
+                    },
+                    {
+                        "Key": "ProjectSegment",
+                        "Value": {
+                            "Fn::Join": [
+                                "::",
+                                [
+                                    {
+                                        "Ref": "ProjectCategory"
+                                    },
+                                    {
+                                        "Ref": "SoftwareName"
+                                    }
+                                ]
+                            ]
+                        }
+                    }
+                ],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "#!/bin/bash\n",
+                                "yum install -y aws-cfn-bootstrap\n",
+                                "/opt/aws/bin/cfn-init ",
+                                "    --stack ",
+                                {
+                                    "Ref": "AWS::StackName"
+                                },
+                                "    --resource KeycloakStandaloneInstance ",
+                                "    --region ",
+                                {
+                                    "Ref": "AWS::Region"
+                                },
+                                "\n",
+                                "/opt/aws/bin/cfn-signal -e $? ",
+                                "    --stack ",
+                                {
+                                    "Ref": "AWS::StackName"
+                                },
+                                "    --resource KeycloakStandaloneInstance ",
+                                "    --region ",
+                                {
+                                    "Ref": "AWS::Region"
+                                },
+                                "\n"
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+        "KeycloakStandaloneSG": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Handles ingress and egress for Keycloak Standalone",
+                "GroupName": "KeycloakStandaloneSG",
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": "0.0.0.0/0",
+                        "Description": "Keycloak web server",
+                        "FromPort": 8080,
+                        "IpProtocol": "tcp",
+                        "ToPort": 8080
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "-",
+                                [
+                                    {
+                                        "Ref": "ProjectName"
+                                    },
+                                    {
+                                        "Ref": "SoftwareName"
+                                    },
+                                    "sg"
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        "Key": "Project",
+                        "Value": {
+                            "Ref": "ProjectName"
+                        }
+                    },
+                    {
+                        "Key": "ProjectSegment",
+                        "Value": {
+                            "Fn::Join": [
+                                "::",
+                                [
+                                    {
+                                        "Ref": "ProjectCategory"
+                                    },
+                                    {
+                                        "Ref": "SoftwareName"
+                                    }
+                                ]
+                            ]
+                        }
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "KeycloakVpcId"
+                }
+            }
+        }
+    }
+}

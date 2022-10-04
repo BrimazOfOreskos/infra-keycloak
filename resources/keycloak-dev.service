@@ -1,0 +1,49 @@
+[Unit]
+Description=Keycloak Open Source Identity and Access Management
+After=syslog.target network.target
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=0
+KillSignal=SIGTERM
+KillMode=process
+SendSIGKILL=no
+SuccessExitStatus=143
+LimitMEMLOCK=infinity
+LimitNOFILE=65535
+User=keycloak
+Group=keycloak
+WorkingDirectory=/opt/keycloak
+ExecStart=/opt/keycloak/bin/kc.sh start-dev
+
+# Environment
+
+# Cache
+Environment=KC_CACHE=local
+
+# Database
+
+# Hostname
+#Environment=KC_HOSTNAME=
+
+# HTTP/TLS
+#Environment=KC_HTTPS_CERTIFICATE_FILE=
+#Environment=KC_HTTPS_CERTIFICATE_KEY_FILE=
+
+# Health
+Environment=KC_HEALTH_ENABLED=true
+
+# Metrics
+Environment=KC_METRICS_ENABLED=true
+
+# Logging
+Environment=KC_LOG_CONSOLE_OUTPUT=json
+
+# Initial user
+Environment=KEYCLOAK_ADMIN=admin
+Environment=KEYCLOAK_ADMIN_PASSWORD=admin
+
+[Install]
+WantedBy=multi-user.target
